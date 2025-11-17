@@ -1,0 +1,9 @@
+# Build artifacts
+*.o
+AddDisplacedPoints
+
+# CSV input/output data
+*.CSV
+
+# MacOS junk
+.DS_Store
