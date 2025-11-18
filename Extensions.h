@@ -2,94 +2,90 @@
  * File: Extensions.h
  *
  * Description:
- *   This header defines the compile-time displacement pattern used by
- *   AddDisplacedPoints.cpp to generate additional points based on each
- *   input point (label, X, Y, Z).
+ *   Defines two displacement sets used by AddDisplacedPoints:
  *
- *   Each displacement entry has the form:
+ *      BLUE  (Blue set)
+ *      RED   (Red set)
  *
+ *   Each displacement is:
  *       { ext, dx, dy, dz }
  *
  *   where:
- *       ext  - string appended to the original label to form a new label
- *       dx   - X offset added to the original X coordinate
- *       dy   - Y offset added to the original Y coordinate
- *       dz   - Z offset added to the original Z coordinate
+ *       ext  = string appended to the original label
+ *       dx   dy   dz   = offsets in mm
  *
- *   For an input point:
+ *   Version 2 of AddDisplacedPoints chooses between BLUE and RED for each
+ *   point based on the numeric part extracted from the point's label.
  *
- *       P = (label, X, Y, Z)
+ *   Edit these displacement sets freely to match your geometry.
  *
- *   AddDisplacedPoints writes a new point:
- *
- *       (label + ext, X + dx, Y + dy, Z + dz)
- *
- *   The list of displacement entries is defined in the array `extList[]`
- *   and its length is given by `numExtensions`.  You may edit, reorder,
- *   remove, or add entries to `extList[]` as needed.
- *
- *   Constants such as R, D, or angular steps may be defined here as well.
- *   These values do not need to be constexpr; simple const variables are
- *   sufficient.
- *
- * Usage:
- *   - Edit the extList[] array to define the displacement pattern you need.
- *   - All numeric values are in millimeters unless otherwise noted.
- *   - The Makefile for AddDisplacedPoints includes Extensions.h as an
- *     explicit dependency, ensuring that any changes to this file will
- *     trigger a rebuild.
- *
- * Example entry:
- *
- *       constexpr Extension extList[] = {
- *           {".A", +1.000, +1.000, 0.000},
- *           {".B", -1.000, +1.000, -1.000},
- *       };
- *
- * Notes:
- *   - Changes to this file require recompilation of AddDisplacedPoints.cpp.
- *   - The struct `Extension` is defined below and must match expectations
- *     in AddDisplacedPoints.cpp.
- *
- *------------------------------------------------------------------------------
- */
-	
+ *----------------------------------------------------------------------------*/
 
 #ifndef EXTENSIONS_H
 #define EXTENSIONS_H
 
 #include <cmath>
+constexpr double PI = 3.14159265358979323846;
+
 
 struct Extension {
-    const char* ext;
+    const char* ext;   // appended to label
     double dx;
     double dy;
     double dz;
 };
 
-// --------------------------------------------------
-// Constants (const, NOT constexpr because sqrt is NOT constexpr on macOS)
-// --------------------------------------------------
-const double R = 5.0;                   // mm
-const double D = R / std::sqrt(2.0);    // mm projected at 45 degrees
+// -----------------------------------------------------------------------------
+// Parameters you can change
+// -----------------------------------------------------------------------------
+const double r = 2.0; // small radial offset (mm)                       
+const double D = r * std::sqrt(2.0); // 45° diagonal offset (mm)
 
-// --------------------------------------------------
-// Extension list
-// --------------------------------------------------
-//
-//     2       1
-//       \   /
-//         *
-//       /   \
-//     3       4
-//
-const Extension extList[] = {
-    {".1", +D, +D, 0.000},  // up right
-    {".2", -D, +D, 0.000},  // up left
-    {".3", -D, -D, 0.000},  // down left  
-    {".4", +D, -D, 0.000}   // down right
+const double R = 6.0;	// large radial offset (mm)
+
+const double deg = PI/180.;
+
+const double a1 =  -30*deg; // angles for blue large radial extensions
+const double a2 =  +90*deg;
+const double a3 = -150*deg;
+
+
+// -----------------------------------------------------------------------------
+// BLUE displacement set (example: 4 diagonal offsets)
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Displacement set Blue
+// -----------------------------------------------------------------------------
+const Extension extListBlue[] = {
+    {"_1", +D, +D, 0.000},  // up-right
+    {"_2", -D, +D, 0.000},  // up-left
+    {"_3", -D, -D, 0.000},  // down-left
+    {"_4", +D, -D, 0.000},   // down-right   
+    
+    {"_5", R*cos(a1), R*sin(a1), 0.000},  // down-right
+    {"_6", R*cos(a2), R*sin(a2), 0.000},  // up-center
+    {"_7", R*cos(a3), R*sin(a3), 0.000}  // down-left
+   
+    
 };
+const int numExtBlue = static_cast<int>(sizeof(extListBlue) / sizeof(extListBlue[0]));
 
-const int numExtensions = sizeof(extList) / sizeof(extList[0]);
+// -----------------------------------------------------------------------------
+// Displacement set Red
+// -----------------------------------------------------------------------------
+const Extension extListRed[] = {
+    {"_1", +D, +D, 0.000},  // up-right
+    {"_2", -D, +D, 0.000},  // up-left
+    {"_3", -D, -D, 0.000},  // down-left
+    {"_4", +D, -D, 0.000},  // down-right
+    
+    // reverse Y for red points
+          
+    {"_5", R*cos(a1), -R*sin(a1), 0.000},  // down-right
+    {"_6", R*cos(a2), -R*sin(a2), 0.000},  // up-center
+    {"_7", R*cos(a3), -R*sin(a3), 0.000}  // down-left
+  
+};
+const int numExtRed = static_cast<int>(sizeof(extListRed) / sizeof(extListRed[0]));
 
-#endif
+#endif // EXTENSIONS_H
