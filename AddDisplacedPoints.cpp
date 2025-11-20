@@ -1,60 +1,27 @@
-// ============================================================================
+//------------------------------------------------------------------------------
 // File: AddDisplacedPoints.cpp
 //
-// Version: 3.0
-// Author:  Luciano Ristori
+// Version 4.0
+// ------------------------
+// Reads a CSV file containing labeled 3D points (label,X,Y,Z).
 //
-// Description:
-//   This program reads a list of 3D points from a CSV file, applies a set of
-//   geometric displacements to each point, and writes the results to a new CSV
-//   file.  Each input point consists of:
+// For each input point:
+//   • Writes the original point (unless --no-original is used)
+//   • Selects a displacement set (BLUE or RED) based on the point number
+//   • Writes all displaced points by appending extList[i].ext and applying dx,dy,dz
 //
-//       label, X, Y, Z
-//
-//   The program extracts the *numeric* portion of each label (e.g. “C12” → 12)
-//   and uses this number to determine whether the point belongs to a
-//   **BLUE** or **RED** displacement category.
-//
-//   The displacement geometry (small diagonals + 3 large radial offsets) is
-//   defined in Extensions.h.  The integer ranges that map label numbers to
-//   BLUE or RED sets are defined in this file.
-//
-//   OUTPUT FILE:
-//       A CSV file containing:
-//         - The original point      (unless --no-original is used)
-//         - Several displaced points per original, with suffixes "_1", "_2", ...
-//
-//   PLOTTING:
-//       Version 3 adds a ROOT 2D (X,Y) scatter plot with:
-//         - BLUE original points → blue marker (larger size)
-//         - RED  original points → red marker (larger size)
-//         - All displaced points → black markers (smaller size)
-//       This plot is:
-//         (1) shown interactively on screen
-//         (2) saved as AddDisplacedPoints.root
-//         (3) saved as AddDisplacedPoints.png
-//
-//   NOTE:
-//       Plotting is ALWAYS performed, even if --no-original is given.
-//       The “no-original” option only affects the CSV file output.
-//
-// ----------------------------------------------------------------------------
+// Additionally:
+//   • Produces a ROOT plot showing:
+//        - Original BLUE points   (large blue markers)
+//        - Original RED points    (large red markers)
+//        - Displaced points       (small black markers)
+//   • Draws the point number above (blue) or below (red) each original point
+//   • Saves the plot to AddDisplacedPoints.png and AddDisplacedPoints.root
 //
 // Usage:
-//     AddDisplacedPoints input.csv output.csv
-//     AddDisplacedPoints input.csv output.csv --no-original
+//      ./AddDisplacedPoints input.csv output.csv [--no-original]
 //
-// Example:
-//     ./AddDisplacedPoints BoltCenters.csv BoltCenters_ext.csv
-//
-// Required files:
-//     - Points.h / Points.cpp     (for reading the input CSV)
-//     - Extensions.h              (defines displacement geometry)
-//
-// Dependencies:
-//     Requires ROOT (https://root.cern/).
-//
-// ============================================================================
+//------------------------------------------------------------------------------
 
 #include <iostream>
 #include <fstream>
@@ -71,13 +38,15 @@
 #include "TApplication.h"
 #include "TCanvas.h"
 #include "TGraph.h"
+#include "TLatex.h"
+#include "TStyle.h"
+#include "TColor.h"
+#include "TROOT.h"
 #include "TFile.h"
 
-// ============================================================================
-// Extract numeric part from a label
-//   Example: "C12" → 12, "P015" → 15, "ABC3" → 3
-//   Returns -1 if no digits found.
-// ============================================================================
+//------------------------------------------------------------------------------
+// Extract numeric part from the label:  "C12" → 12,  "P015" → 15
+//------------------------------------------------------------------------------
 int extractLabelNumber(const std::string& label) {
     std::string digits;
     for (char c : label) {
@@ -89,37 +58,9 @@ int extractLabelNumber(const std::string& label) {
     return std::stoi(digits);
 }
 
-// ============================================================================
-// Simple inclusive integer range
-// ============================================================================
-struct Range { int lo; int hi; };
-
-// ============================================================================
-// BLUE label-number ranges  (editable)
-// ============================================================================
-const Range rangesBlue[] = {
-    {  1,  8 },
-    { 16, 21 },
-    { 28, 32 },
-    { 37, 39 },
-    { 42, 42 }
-};
-const int numBlueRanges = sizeof(rangesBlue) / sizeof(rangesBlue[0]);
-
-// ============================================================================
-// RED label-number ranges  (editable)
-// ============================================================================
-const Range rangesRed[] = {
-    {  9, 15 },
-    { 22, 27 },
-    { 33, 36 },
-    { 40, 41 }
-};
-const int numRedRanges = sizeof(rangesRed) / sizeof(rangesRed[0]);
-
-// ============================================================================
-// Check whether an integer value lies inside any of a list of ranges
-// ============================================================================
+//------------------------------------------------------------------------------
+// Check if a number lies within ANY range in a list
+//------------------------------------------------------------------------------
 bool inAnyRange(const Range* ranges, int nRanges, int value) {
     for (int i = 0; i < nRanges; ++i) {
         if (value >= ranges[i].lo && value <= ranges[i].hi) {
@@ -129,189 +70,199 @@ bool inAnyRange(const Range* ranges, int nRanges, int value) {
     return false;
 }
 
-// ============================================================================
-// Choose whether the point uses the BLUE or RED displacement set.
-// If the label number falls into a BLUE range → BLUE
-// If into a RED range → RED
-// Otherwise fallback → RED
-//
-// Returns: pointer to the chosen Extension array
-//          and sets `count` to the number of entries.
-// ============================================================================
+//------------------------------------------------------------------------------
+// Choose BLUE or RED displacement set
+//------------------------------------------------------------------------------
 const Extension* chooseSet(int number, int& count) {
     if (number >= 0 && inAnyRange(rangesBlue, numBlueRanges, number)) {
         count = numExtBlue;
         return extListBlue;
     }
-
     if (number >= 0 && inAnyRange(rangesRed, numRedRanges, number)) {
         count = numExtRed;
         return extListRed;
     }
-
-    // Fallback behavior (choose RED)
+    // Fallback: RED
     count = numExtRed;
     return extListRed;
 }
 
-// ============================================================================
+//------------------------------------------------------------------------------
 // MAIN
-// ============================================================================
+//------------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
 
     bool writeOriginal = true;
 
-    // Parse command-line arguments
     if (argc == 4) {
         if (std::string(argv[3]) == "--no-original") {
             writeOriginal = false;
         } else {
-            std::cerr << "Unknown option: " << argv[3] << "\n"
-                      << "Usage: " << argv[0]
-                      << " inputFile outputFile [--no-original]\n";
+            std::cerr << "Unknown option: " << argv[3] << "\n";
             return 1;
         }
     } else if (argc != 3) {
         std::cerr << "Usage: " << argv[0]
-                  << " inputFile outputFile [--no-original]\n";
+                  << " input.csv output.csv [--no-original]\n";
         return 1;
     }
 
     const std::string inputFile  = argv[1];
     const std::string outputFile = argv[2];
 
-    // Read input points
+    // Read all points
     std::vector<Point> points = readPoints(inputFile);
 
-    // Open output CSV
+    // Open output file
     std::ofstream out(outputFile);
-    if (!out.is_open()) {
-        std::cerr << "Error opening output file.\n";
+    if (!out) {
+        std::cerr << "Error opening output file " << outputFile << "\n";
         return 1;
     }
 
     out.setf(std::ios::fixed);
     out << std::setprecision(3);
 
-    // -------------------------------------------------------------------------
-    // Prepare vectors for ROOT plotting
-    // -------------------------------------------------------------------------
-    std::vector<double> xBlueOrig, yBlueOrig;
-    std::vector<double> xRedOrig,  yRedOrig;
-    std::vector<double> xDisp,     yDisp;
+    //--------------------------------------------------------------------------
+    // TGraph containers for plotting
+    //--------------------------------------------------------------------------
+    std::vector<double> xb, yb;  // blue originals
+    std::vector<double> xr, yr;  // red originals
+    std::vector<double> xd, yd;  // displaced points
 
-    // -------------------------------------------------------------------------
-    // Process each input point
-    // -------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    // Process all points
+    //--------------------------------------------------------------------------
     for (const auto& p : points) {
 
-        const double x = p.coords[0];
-        const double y = p.coords[1];
-        const double z = p.coords[2];
+        double x = p.coords[0];
+        double y = p.coords[1];
+        double z = p.coords[2];
 
-        // Determine BLUE or RED based on label number
         int number = extractLabelNumber(p.label);
+
         int nExt = 0;
         const Extension* extList = chooseSet(number, nExt);
 
-        // Classify original point for plotting
-        bool isBlue = (extList == extListBlue);
+        bool isBlue = (number >= 0 && inAnyRange(rangesBlue, numBlueRanges, number));
+        bool isRed  = (number >= 0 && inAnyRange(rangesRed,  numRedRanges,  number));
 
-        if (isBlue) {
-            xBlueOrig.push_back(x);
-            yBlueOrig.push_back(y);
-        } else {
-            xRedOrig.push_back(x);
-            yRedOrig.push_back(y);
-        }
-
-        // Write original point to CSV unless suppressed
+        // Save original to CSV
         if (writeOriginal) {
             out << p.label << "," << x << "," << y << "," << z << "\n";
         }
 
-        // Generate and write displaced points
+        // Save original to graph containers
+        if (isBlue) {
+            xb.push_back(x);
+            yb.push_back(y);
+        } else if (isRed) {
+            xr.push_back(x);
+            yr.push_back(y);
+        }
+
+        // Save displaced points
         for (int i = 0; i < nExt; ++i) {
             const Extension& e = extList[i];
 
-            double xNew = x + e.dx;
-            double yNew = y + e.dy;
-            double zNew = z + e.dz;
+            double xp = x + e.dx;
+            double yp = y + e.dy;
+            double zp = z + e.dz;
 
-            // CSV output
             out << p.label << e.ext << ","
-                << xNew << "," << yNew << "," << zNew << "\n";
+                << xp << "," << yp << "," << zp << "\n";
 
-            // For plotting (displaced points are black)
-            xDisp.push_back(xNew);
-            yDisp.push_back(yNew);
+            xd.push_back(xp);
+            yd.push_back(yp);
         }
     }
 
     out.close();
     std::cout << "Wrote " << outputFile << "\n";
 
-    // -------------------------------------------------------------------------
-    // ROOT plotting
-    // -------------------------------------------------------------------------
-    TApplication app("AddDisplacedPointsApp", &argc, argv);
+    //--------------------------------------------------------------------------
+    // ROOT application
+    //--------------------------------------------------------------------------
+    int dummy = 0;
+    TApplication app("app", &dummy, nullptr);
 
-    TCanvas* c1 = new TCanvas("c1", "AddDisplacedPoints XY Plot", 800, 800);
+    TCanvas* c = new TCanvas("c", "AddDisplacedPoints", 900, 900);
+    c->SetGrid();
 
-    TGraph* grDisp = nullptr;
-    TGraph* grBlue = nullptr;
-    TGraph* grRed  = nullptr;
-    bool firstDrawn = false;   // The first graph defines axes
+    // All original points in one frame graph (for axes)
+    std::vector<double> xa_all = xb;
+    xa_all.insert(xa_all.end(), xr.begin(), xr.end());
+    std::vector<double> ya_all = yb;
+    ya_all.insert(ya_all.end(), yr.begin(), yr.end());
 
-    // Displaced points (black, small)
-    if (!xDisp.empty()) {
-        grDisp = new TGraph(xDisp.size(), xDisp.data(), yDisp.data());
-        grDisp->SetName("grDisplaced");
-        grDisp->SetTitle("AddDisplacedPoints;X [mm];Y [mm]");
-        grDisp->SetMarkerStyle(20);
-        grDisp->SetMarkerSize(0.6);
-        grDisp->SetMarkerColor(1);
-        grDisp->Draw("AP");
-        firstDrawn = true;
+    TGraph* gAll = new TGraph(xa_all.size(), xa_all.data(), ya_all.data());
+    gAll->SetMarkerSize(0); // hidden
+    gAll->Draw("AP");       // draws axes
+
+    // Blue originals
+    TGraph* gBlue = new TGraph(xb.size(), xb.data(), yb.data());
+    gBlue->SetMarkerColor(kBlue+1);
+    gBlue->SetMarkerStyle(20);
+    gBlue->SetMarkerSize(2.5);
+    gBlue->Draw("P SAME");
+
+    // Red originals
+    TGraph* gRed = new TGraph(xr.size(), xr.data(), yr.data());
+    gRed->SetMarkerColor(kRed+1);
+    gRed->SetMarkerStyle(20);
+    gRed->SetMarkerSize(2.5);
+    gRed->Draw("P SAME");
+
+    // Displaced points
+    TGraph* gDis = new TGraph(xd.size(), xd.data(), yd.data());
+    gDis->SetMarkerColor(kBlack);
+    gDis->SetMarkerStyle(20);
+    gDis->SetMarkerSize(0.8);
+    gDis->Draw("P SAME");
+
+    //--------------------------------------------------------------------------
+    // Draw labels for original points
+    //--------------------------------------------------------------------------
+    for (size_t i = 0; i < points.size(); ++i) {
+
+        int number = extractLabelNumber(points[i].label);
+        if (number < 0) continue;
+
+        double x = points[i].coords[0];
+        double y = points[i].coords[1];
+
+        bool isBlue = inAnyRange(rangesBlue, numBlueRanges, number);
+        bool isRed  = inAnyRange(rangesRed,  numRedRanges,  number);
+
+        double yLabel = y;
+        int align = 21; // center horizontally
+
+        if (isBlue) {
+            yLabel = y + 30.0; // above
+            align = 21;
+        } else if (isRed) {
+            yLabel = y - 30.0; // below
+            align = 23;
+        } else {
+            continue;
+        }
+
+        TLatex* tl = new TLatex(x, yLabel, Form("%d", number));
+        tl->SetTextColor(kBlack);
+        tl->SetTextSize(0.015);
+        tl->SetTextAlign(align);
+        tl->Draw("SAME");
     }
 
-    // Blue originals (blue, larger)
-    if (!xBlueOrig.empty()) {
-        grBlue = new TGraph(xBlueOrig.size(), xBlueOrig.data(), yBlueOrig.data());
-        grBlue->SetName("grBlueOriginal");
-        grBlue->SetMarkerStyle(20);
-        grBlue->SetMarkerSize(1.2);
-        grBlue->SetMarkerColor(4);
-        grBlue->Draw(firstDrawn ? "P SAME" : "AP");
-        firstDrawn = true;
-    }
+    c->Modified();
+    c->Update();
 
-    // Red originals (red, larger)
-    if (!xRedOrig.empty()) {
-        grRed = new TGraph(xRedOrig.size(), xRedOrig.data(), yRedOrig.data());
-        grRed->SetName("grRedOriginal");
-        grRed->SetMarkerStyle(20);
-        grRed->SetMarkerSize(1.2);
-        grRed->SetMarkerColor(2);
-        grRed->Draw(firstDrawn ? "P SAME" : "AP");
-        firstDrawn = true;
-    }
+    // Save outputs
+    c->Print("AddDisplacedPoints.png");
+    TFile f("AddDisplacedPoints.root", "RECREATE");
+    c->Write();
+    f.Close();
 
-    c1->Update();
-
-    // Save ROOT output
-    TFile outFile("AddDisplacedPoints.root", "RECREATE");
-    c1->Write("AddDisplacedPointsCanvas");
-    if (grDisp) grDisp->Write();
-    if (grBlue) grBlue->Write();
-    if (grRed)  grRed->Write();
-    outFile.Close();
-
-    // Save PNG picture
-    c1->SaveAs("AddDisplacedPoints.png");
-
-    // Enter ROOT event loop
     app.Run();
-
     return 0;
 }
