@@ -1,45 +1,101 @@
-/*==============================================================================
+/*------------------------------------------------------------------------------
  * File: Extensions.h
  *
- * Version: 3.0
- * Author : Luciano Ristori
+ * Version 4.0 (candidate)
+ * ------------------------
+ * Defines ALL user-editable geometric configuration for AddDisplacedPoints.
  *
- * Description:
- *   Defines the geometry of the BLUE and RED displacement sets used by
- *   AddDisplacedPoints.  Each displacement consists of:
+ * Contents:
+ *   • Mathematical constants (PI, deg)
+ *   • Small radial displacement (r) and diagonal offset (D)
+ *   • Large radial displacement (R) and angles for BLUE/RED sets
+ *   • BLUE/RED numeric ranges (which point IDs use which displacement set)
+ *   • BLUE displacement list (extListBlue + numExtBlue)
+ *   • RED displacement list  (extListRed  + numExtRed)
  *
- *       ext   - string appended to the original label
- *       dx
- *       dy
- *       dz    - applied offsets in millimeters
+ * This header provides ALL configuration and geometry used by the program.
+ * AddDisplacedPoints.cpp contains the logic only.
  *
- *   Geometry:
- *     - Four small "diagonal" displacements at radius r, using dx=±D, dy=±D
- *       where D = r * sqrt(2).
+ * All values in this file are meant to be user-editable.
  *
- *     - Three large radial displacements at radius R:
- *           angle a1 = -30°
- *           angle a2 = +90°
- *           angle a3 = -150°
- *
- *     - BLUE set uses these angles directly.
- *     - RED  set uses the same magnitudes, but reverses the sign of dy
- *       (mirror symmetry in Y).
- *
- *   The user may add/remove displacement entries or modify r, R, a1, a2, a3.
- *   All displacements are applied in AddDisplacedPoints.cpp after a BLUE/RED
- *   selection based on the numeric part of the label.
- *
- *============================================================================*/
+ *------------------------------------------------------------------------------*/
 
 #ifndef EXTENSIONS_H
 #define EXTENSIONS_H
 
 #include <cmath>
+#include <string>
 
-constexpr double PI = 3.14159265358979323846;
+/*------------------------------------------------------------------------------
+ * Mathematical constants
+ *------------------------------------------------------------------------------*/
+constexpr double PI  = 3.14159265358979323846;
+constexpr double deg = PI / 180.0;
 
-// Each displacement entry
+/*------------------------------------------------------------------------------
+ * Small radial displacement (mm)
+ *------------------------------------------------------------------------------*/
+constexpr double r = 2.0;
+
+/*------------------------------------------------------------------------------
+ * Diagonal offset for 45° displacements (mm)
+ *   D = r / sqrt(2)
+ *------------------------------------------------------------------------------*/
+const double D = r / std::sqrt(2.0);
+
+/*------------------------------------------------------------------------------
+ * Large radial displacement (mm)
+ *------------------------------------------------------------------------------*/
+constexpr double R = 6.0;
+
+/*------------------------------------------------------------------------------
+ * Angles (in radians) used for large radial offsets
+ *  a1 = -30°,  a2 = +90°,  a3 = -150°
+ *------------------------------------------------------------------------------*/
+constexpr double a1 = -30.0 * deg;
+constexpr double a2 = +90.0 * deg;
+constexpr double a3 = -150.0 * deg;
+
+/*------------------------------------------------------------------------------
+ * Range struct (integer inclusive)
+ *------------------------------------------------------------------------------*/
+struct Range {
+    int lo;
+    int hi;
+};
+
+/*------------------------------------------------------------------------------
+ * BLUE numeric ranges
+ *   If a point's label number falls within ANY of these ranges,
+ *   AddDisplacedPoints uses extListBlue for that point.
+ *------------------------------------------------------------------------------*/
+const Range rangesBlue[] = {
+    {  1,  8 },
+    { 16, 21 },
+    { 28, 32 },
+    { 37, 39 },
+    { 42, 42 }
+};
+const int numBlueRanges = sizeof(rangesBlue) / sizeof(rangesBlue[0]);
+
+/*------------------------------------------------------------------------------
+ * RED numeric ranges
+ *   If a point's label number falls within ANY of these ranges,
+ *   AddDisplacedPoints uses extListRed for that point.
+ *------------------------------------------------------------------------------*/
+const Range rangesRed[] = {
+    {  9, 15 },
+    { 22, 27 },
+    { 33, 36 },
+    { 40, 41 }
+};
+const int numRedRanges = sizeof(rangesRed) / sizeof(rangesRed[0]);
+
+/*------------------------------------------------------------------------------
+ * Displacement extension definition
+ *   ext → string appended to original label
+ *   dx, dy, dz → displacement offsets in mm
+ *------------------------------------------------------------------------------*/
 struct Extension {
     const char* ext;
     double dx;
@@ -47,64 +103,44 @@ struct Extension {
     double dz;
 };
 
-// -----------------------------------------------------------------------------
-// Parameters controlling the displacement geometry
-// -----------------------------------------------------------------------------
-
-// Small radial offset (mm)
-const double r = 2.0;
-
-// 45° diagonal displacement magnitude (mm)
-const double D = r * std::sqrt(2.0);
-
-// Large radial offset
-const double R = 6.0;
-
-// Degrees → radians conversion factor
-const double deg = PI / 180.0;
-
-// Angles for large radial BLUE displacements
-const double a1 =  -30 * deg;
-const double a2 =  +90 * deg;
-const double a3 = -150 * deg;
-
-// -----------------------------------------------------------------------------
-// BLUE displacement set
-// -----------------------------------------------------------------------------
+/*------------------------------------------------------------------------------
+ * BLUE displacement set
+ *   First 4: 45° diagonals
+ *   Next 3:  Large radial offsets (angles a1, a2, a3)
+ *------------------------------------------------------------------------------*/
 const Extension extListBlue[] = {
 
-    // Small diagonals
-    {"_1", +D, +D, 0.000},
-    {"_2", -D, +D, 0.000},
-    {"_3", -D, -D, 0.000},
-    {"_4", +D, -D, 0.000},
+    // 45° diagonal offsets
+    {"_1", +D, +D, 0.0},      // up-right
+    {"_2", -D, +D, 0.0},      // up-left
+    {"_3", -D, -D, 0.0},      // down-left
+    {"_4", +D, -D, 0.0},      // down-right
 
-    // Large radial displacements
-    {"_5", R*std::cos(a1), R*std::sin(a1), 0.000},
-    {"_6", R*std::cos(a2), R*std::sin(a2), 0.000},
-    {"_7", R*std::cos(a3), R*std::sin(a3), 0.000}
+    // Large radial offsets (BLUE)
+    {"_5", R*std::cos(a1), R*std::sin(a1), -6.},
+    {"_6", R*std::cos(a2), R*std::sin(a2), -6.},
+    {"_7", R*std::cos(a3), R*std::sin(a3), -6.}
 };
-
 const int numExtBlue = sizeof(extListBlue) / sizeof(extListBlue[0]);
 
-// -----------------------------------------------------------------------------
-// RED displacement set
-//   Same geometry as BLUE, but Y is mirrored (sin → -sin)
-// -----------------------------------------------------------------------------
+/*------------------------------------------------------------------------------
+ * RED displacement set
+ *   First 4: 45° diagonals (same as BLUE)
+ *   Next 3:  Large radial offsets with Y reversed (mirror)
+ *------------------------------------------------------------------------------*/
 const Extension extListRed[] = {
 
-    // Small diagonals
-    {"_1", +D, +D, 0.000},
-    {"_2", -D, +D, 0.000},
-    {"_3", -D, -D, 0.000},
-    {"_4", +D, -D, 0.000},
+    // 45° diagonal offsets (same as BLUE)
+    {"_1", +D, +D, 0.0},
+    {"_2", -D, +D, 0.0},
+    {"_3", -D, -D, 0.0},
+    {"_4", +D, -D, 0.0},
 
-    // Large radial displacements (mirrored in Y)
-    {"_5", R*std::cos(a1), -R*std::sin(a1), 0.000},
-    {"_6", R*std::cos(a2), -R*std::sin(a2), 0.000},
-    {"_7", R*std::cos(a3), -R*std::sin(a3), 0.000}
+    // Large radial offsets (RED mirrors in Y)
+    {"_5", R*std::cos(a1), -R*std::sin(a1), -6.},
+    {"_6", R*std::cos(a2), -R*std::sin(a2), -6.},
+    {"_7", R*std::cos(a3), -R*std::sin(a3), -6.}
 };
-
 const int numExtRed = sizeof(extListRed) / sizeof(extListRed[0]);
 
 #endif // EXTENSIONS_H
