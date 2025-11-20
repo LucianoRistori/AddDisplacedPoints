@@ -1,145 +1,136 @@
-# AddDisplacedPoints — Version 3.0
+# AddDisplacedPoints (v4.0)
 
-A geometry-based point expander with visualization.
+AddDisplacedPoints is a C++/ROOT utility that reads a list of measured 3D points (X, Y, Z) and generates additional displaced copies of each point. These displaced points are placed at predefined offsets in the XY plane, and the program can optionally display a ROOT plot showing original points, displaced copies, and labels identifying each displacement.
 
-This tool reads a CSV file containing points of the form:
+This tool is useful for:
+- simulating measurement perturbations,
+- generating synthetic calibration grids,
+- studying tolerance effects,
+- creating visual overlays for flatness or scan-alignment studies.
 
-    label, X, Y, Z
+All common geometric definitions are centralized in common/Extensions.h and common/Points.h, allowing multiple programs (FlatnessScan, CompareScan, OptimizePath, etc.) to share displacement conventions and point-handling logic.
 
-For each input point, the program:
-1. Extracts the numeric part of its label (e.g., C12 → 12, P015 → 15)
-2. Assigns the point to either the BLUE or RED displacement set, based on integer ranges
-3. Writes the original point (unless --no-original is used)
-4. Writes several displaced points, each with updated coordinates and label suffixes
-5. Produces an interactive ROOT 2D (X,Y) scatter plot:
-     - BLUE originals → blue markers (larger)
-     - RED originals  → red markers  (larger)
-     - All displaced  → black markers (smaller)
-6. Saves:
-     - AddDisplacedPoints.root — ROOT file with the canvas and graphs
-     - AddDisplacedPoints.png  — exported image
-     - <output>.csv            — expanded point list
+------------------------------------------------------------
+## Features
+------------------------------------------------------------
 
----
+Reads 3D coordinate files of the form:
+    <label>  X  Y  Z
 
-## Version History
+Generates displaced points using radii r and angles θ defined in Extensions.h:
+    dx = r * cos(θ)
+    dy = r * sin(θ)
+resulting in:
+    (X + dx, Y + dy, Z)
 
-### v1.0
-- Basic displacement of all points using a single displacement set.
+Centralized geometry and displacement configuration located only in:
+    common/Extensions.h
 
-### v2.0
-- Added BLUE and RED displacement sets.
-- Added label-number range selection logic.
-- Added --no-original option.
+Optional ROOT visualization of:
+- original points,
+- displaced points,
+- text labels for each displaced copy.
 
-### v3.0
-- Added ROOT 2D (X,Y) plotting.
-- Original points shown in color and double marker size.
-- Displaced points shown in black.
-- Added PNG image export.
-- Full documentation and comments.
+Output file includes both original and displaced points.
 
----
+------------------------------------------------------------
+## File Structure
+------------------------------------------------------------
 
+    AddDisplacedPoints/
+        AddDisplacedPoints.cpp
+        Extensions.h
+        common/
+            Points.h
+            Points.cpp
+
+------------------------------------------------------------
 ## Building
+------------------------------------------------------------
 
-Requires ROOT (https://root.cern/).
-
-Example installation on macOS:
-
-    brew install root
-
-To build:
-
-    make clean
+Build with:
     make
 
-This produces the executable:
+ROOT must be initialized before building:
+    source ~/Dropbox/Documents/initRoot
 
-    AddDisplacedPoints
-
----
-
+------------------------------------------------------------
 ## Running
+------------------------------------------------------------
 
-    ./AddDisplacedPoints input.csv output.csv
+Basic usage:
+    ./AddDisplacedPoints inputPoints.txt outputPoints.txt
 
-Or, to suppress the original points in the CSV file:
+With visualization:
+    ./AddDisplacedPoints input.txt output.txt --show
 
-    ./AddDisplacedPoints input.csv output.csv --no-original
+------------------------------------------------------------
+## Displacement Definitions (Extensions.h)
+------------------------------------------------------------
 
-The program always shows the originals in the ROOT plot, regardless of --no-original.
+All displacement radii and angles are defined in Extensions.h. Example:
 
----
+    radii  = {0.0, 5.0, 10.0}
+    thetas = {0, π/2, π, 3π/2}
 
-## Output Files
+Displacement:
+    dx = r * cos(θ)
+    dy = r * sin(θ)
 
-- output.csv             — expanded list of points
-- AddDisplacedPoints.root — ROOT canvas + graphs
-- AddDisplacedPoints.png  — exported plot image
+Changing displacement geometry requires editing only Extensions.h.
 
----
+------------------------------------------------------------
+## Output Format
+------------------------------------------------------------
 
-## Editing Displacement Geometry
+Output preserves the input format:
+    <label>  X  Y  Z
 
-Displacement sets are in:
+Displaced points typically use suffixes like:
+    A1_d0
+    A1_d1
+    A1_d2
 
-    Extensions.h
+------------------------------------------------------------
+## Example
+------------------------------------------------------------
 
-### Small radial offsets
-Controlled by:
+Input:
+    A1   100.0   200.0   3.0
+    A2   110.0   205.0   2.7
 
-    const double r = 2.0;
-    const double D = r * sqrt(2.0);
+If four displacements are defined, output will include:
+    A1
+    A1_d0
+    A1_d1
+    A1_d2
+    A1_d3
+    A2
+    A2_d0
+    A2_d1
+    A2_d2
+    A2_d3
 
-### Large radial offsets
-Magnitude:
+------------------------------------------------------------
+## Versioning
+------------------------------------------------------------
 
-    const double R = 6.0;
+v4.0
+- All displacement logic moved to Extensions.h
+- Bug fixes in displacement geometry
+- Updated label drawing
+- README rewritten
 
-Angles (degrees):
+Create and push tag:
+    git tag -a v4.0 -m "Stable v4.0 release"
+    git push origin v4.0
 
-    a1 = -30°
-    a2 = +90°
-    a3 = -150°
+------------------------------------------------------------
+## Future Enhancements
+------------------------------------------------------------
 
-BLUE set uses these angles directly.  
-RED set mirrors the Y-component (sin → -sin).
+- More visualization modes
+- Command-line-selectable displacement sets
+- ROOT file / image exports
 
----
-
-## Editing BLUE/RED Ranges
-
-Ranges are in AddDisplacedPoints.cpp:
-
-    const Range rangesBlue[] = { {1,8}, {16,21}, ... };
-    const Range rangesRed[]  = { {9,15}, {22,27}, ... };
-
-A point is BLUE if its numeric label is in a BLUE range.  
-Otherwise it is RED.
-
----
-
-## Plot Customization
-
-You can change in AddDisplacedPoints.cpp:
-
-- Marker sizes  
-- Colors  
-- Canvas size  
-- Axis labels  
-
----
-
-## Notes
-
-- The numeric part of the label is extracted from all digits.
-  Example: ABC015Z9 → 159
-- If no digits are found, the point defaults to RED.
-- The program uses one canvas with three TGraphs.
-
----
-
-## License
-
-This code is part of private research and geometry work by Luciano Ristori.
+All geometry changes are made exclusively in Extensions.h.
